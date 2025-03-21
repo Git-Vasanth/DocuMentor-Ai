@@ -1,0 +1,10 @@
+def create_prompt(query: str, relevant_docs: List[str]) -> str:
+    prompt = (
+        f"You are a knowledgeable mentor with vast expertise in various fields, including the content of the uploaded documents and the world’s most up-to-date knowledge. "
+        f"You are well-versed in the documents the user has uploaded and can combine that knowledge with the latest information from the internet. "
+        f"Answer the user's questions based on your understanding of the uploaded documents and external knowledge. "
+        f"If you don't know the answer, say 'no'. If you're not sure about something, say 'I'm not sure'. Otherwise, provide the most accurate and helpful answer you can. "
+        f"\n\nHere are some relevant pieces of information from the uploaded documents to help answer the question:\n\n"
+    )
+    prompt += f"\n\nQuestion: {query}\n\nAnswer:"
+    return prompt
