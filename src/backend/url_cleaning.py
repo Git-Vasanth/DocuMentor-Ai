@@ -1,22 +1,21 @@
 import os
 import requests
 from bs4 import BeautifulSoup, Tag
-from datetime import datetime
 import logging
 from concurrent.futures import ThreadPoolExecutor
-import shutil
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Directories for saving files
-UPLOAD_DIR = "uploaded_files/docs/"
-URL_FILE_PATH = "uploaded_files/urls/urls.txt"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = "uploaded_files/urls"  # Adjusted to directory only
+URL_FILE_PATH = os.path.join(UPLOAD_DIR, "urls.txt") # added URL_FILE_PATH
+OUTPUT_DIR = "M:/Projects/documentor-ai/documentor-ai/src/backend/uploaded_files/formatted"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Path to the combined output file
-combined_file_path = "M:/Projects/documentor-ai/documentor-ai/src/backend/uploaded_files/docs/files_url_formatted.txt"
+combined_file_path = os.path.join(OUTPUT_DIR, "Urls_combined_formatted.txt")
 
 def process_urls(urls):
     logger.info("Order - 1 : Processing URLs")
@@ -32,15 +31,6 @@ def process_urls(urls):
         for result in results:
             if result:
                 all_formatted_texts.append(result)
-    
-    # After all URLs are processed, clear the content of the urls.txt file
-    try:
-        with open(URL_FILE_PATH, 'w', encoding='utf-8') as file:
-            file.truncate(0)  # Clear the file content
-        logger.info(f"Cleared the contents of '{URL_FILE_PATH}' after processing.")
-    except Exception as e:
-        logger.error(f"Error clearing the URLs file: {str(e)}")
-        raise Exception(f"Error clearing the URLs file: {str(e)}")
 
     # Step 3: Save all formatted content after all URLs are processed (Order 5)
     if all_formatted_texts:
@@ -125,14 +115,12 @@ def format_text(content):
     return output
 
 def save_output(formatted_text):
-    logger.info("Order - 5 : Appending formatted URL content to files_combined_formatted.txt")
+    logger.info("Order - 5 : Appending formatted URL content to Urls_combined_formatted.txt")
 
     if not formatted_text.strip():
         logger.warning("No content to save.")
         return
     
-    combined_file_path = os.path.join(UPLOAD_DIR, "files_combined_formatted.txt")  # Same output file for all content
-
     try:
         with open(combined_file_path, 'a', encoding='utf-8') as file:
             file.write(f"\n\n--- Start of formatted content from URL ---\n")

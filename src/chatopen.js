@@ -11,6 +11,8 @@ import { GiMoebiusTriangle } from "react-icons/gi";
 import { LuSettings } from "react-icons/lu";
 import { getFirestore, collection, addDoc, query, orderBy, getDocs } from "firebase/database";
 import { db } from "./firebase.config";
+import Profile from './profile-test'; // Import Profile-test component
+import FileUploadWindow from './fileuploadform'
 
 const ChatContainer = styled(Paper)(({ theme }) => ({
   height: "93vh",
@@ -61,12 +63,29 @@ const InputContainer = styled(Box)({
   gap: "1rem"
 });
 
-const SuggestionsContainer = styled(Stack)({
+const SuggestionsContainer = styled(Stack)(({ theme }) => ({
   display: "flex",
   flexDirection: "row",
   gap: "0.5rem",
-  flexWrap: "wrap"
-});
+  flexWrap: "nowrap",  // Prevent wrapping of items
+  overflowX: "auto",   // Enable horizontal scroll when needed
+  maxWidth: "100%",    // Ensure full width of the parent container
+  paddingBottom: theme.spacing(1), // Optional: to add some space at the bottom
+  
+  // Custom scrollbar styling
+  "&::-webkit-scrollbar": {
+    height: "6px",  // Horizontal scrollbar height
+  },
+  "&::-webkit-scrollbar-thumb": {
+    backgroundColor: "rgba(255, 255, 255, 0.7)",  // Thumb color
+    borderRadius: "3px",  // Rounded corners for the thumb
+  },
+  "&::-webkit-scrollbar-thumb:hover": {
+    backgroundColor: "rgba(255, 255, 255, 1)",  // Thumb color on hover
+  },
+}));
+
+
 
 const StyledInput = styled("textarea")({
   border: "none",
@@ -77,6 +96,7 @@ const StyledInput = styled("textarea")({
   outline: "none",
   width: "100%",
   fontFamily: "Courier New, Courier, monospace", // Ensure Courier font for input
+ //choose this for the presentation  fontWeight: 600,
   resize: "none",  // Prevent resizing
   minHeight: "50px", // Minimum height for textarea
   "&::placeholder": {
@@ -107,7 +127,7 @@ const handleKeyPress = (e) => {
   // Prevent submitting the message if Shift + Enter is pressed
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    handleSendMessage();
+    //handleSendMessage();
   }
 };
 
@@ -127,11 +147,13 @@ const ChatInterface = () => {
   const [inputValue, setInputValue] = useState("");
   const [suggestions, setSuggestions] = useState([
     "Tell me more",
-    "Can you explain?",
-    "I need help"
+    "Can you explain with a real time example?",
+    "Whats the Summary of Document ?"
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
+  const [showProfile, setShowProfile] = useState(false); // State for Profile visibility
+  const [showFileUpload, setShowFileUpload] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -188,6 +210,24 @@ const ChatInterface = () => {
     setInputValue("");
   };
 
+  const handleProfileClick = () => {
+    setShowProfile(prev => !prev); // Toggle the state of the profile visibility
+  };
+  
+  
+  // Function to close the profile window
+  const handleCloseProfile = () => {
+    setShowProfile(false); // Close profile window
+  };
+  
+  const handleFileUploadToggle = () => {
+    setShowFileUpload(prev => !prev); // Toggle FileUploadWindow visibility
+  };
+
+  const handleCloseFileUpload = () => {
+    setShowFileUpload(false); // close the upload window.
+  }
+
   return (
     <Container maxWidth="xl" sx={{ marginTop: "20px" }}>
       <ChatContainer elevation={3}>
@@ -195,10 +235,10 @@ const ChatInterface = () => {
           <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
             {/* Left Section */}
             <Box display="flex" alignItems="center">
-              <IconButton color="primary" sx={{ marginRight: "10px" }} aria-label="user profile">
+              <IconButton color="primary" sx={{ marginRight: "10px" }} aria-label="user profile" onClick={handleProfileClick}>
                 <FaUserCircle size={24} />
               </IconButton>
-              <IconButton sx={{ marginRight: "10px" }} aria-label="world upload">
+              <IconButton sx={{ marginRight: "10px" }} aria-label="world upload" onClick={handleFileUploadToggle} >
                 <TbWorldUpload size={24} />
               </IconButton>
             </Box>
@@ -222,6 +262,12 @@ const ChatInterface = () => {
             </Box>
           </Box>
         </HeaderContainer>
+
+        {/* Profile Section - Conditionally Rendered */}
+        {showProfile && <Profile onClose={handleCloseProfile} />}
+
+         {/* Upload Section - Conditionally Rendered */}
+        {showFileUpload && <FileUploadWindow onClose={handleCloseFileUpload} />}
 
         {/* Messages Section */}
         <MessagesContainer>

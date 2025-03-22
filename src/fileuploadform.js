@@ -127,13 +127,13 @@ function FileUploadWindow({ onClose, onLogout }) {
     const formData = new FormData();
   
     // Append files and URLs to form data
-    if (files.length > 0) {
+    if (files.length >= 0) {
       files.forEach((file) => {
         formData.append('files', file);
       });
     }
   
-    if (urls.length > 0) {
+    if (urls.length >= 0) {
       urls.forEach((url) => {
         formData.append('urls', url);
       });
@@ -321,7 +321,7 @@ function FileUploadWindow({ onClose, onLogout }) {
             onClick={handleSubmit}
             fullWidth
             sx={{ mt: 3, borderRadius: '16px' }}
-            disabled={loading || (fileCount + urlCount === 0) || (fileCount + urlCount > 20)}
+            disabled={loading || (fileCount + urlCount > 20)}
           >
             {loading ? <CircularProgress size={24} color="inherit" /> : 'Submit'}
           </Button>

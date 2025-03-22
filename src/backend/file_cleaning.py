@@ -9,7 +9,11 @@ import time
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Define the input directory where files are uploaded
 UPLOAD_DIR = "uploaded_files/docs/"
+
+# Define the output directory where processed files will be saved
+OUTPUT_DIR = "M:/Projects/documentor-ai/documentor-ai/src/backend/uploaded_files/formatted"
 
 def ensure_directory_exists(directory):
     if not os.path.exists(directory):
@@ -21,15 +25,15 @@ def ensure_directory_exists(directory):
             raise
 
 def process_file(file_path):
-    logger.info("text_cleaning - Welcome")
-    logger.info("order - 1 : Finding the right type of file")
+    logger.info("Text_cleaning - Welcome")
+    logger.info("Order - 1 : Finding the right type of file")
     
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
     file_extension = os.path.splitext(file_path)[1].lower()
 
-    ensure_directory_exists(UPLOAD_DIR)
+    ensure_directory_exists(OUTPUT_DIR)
 
     if file_extension == '.txt':
         extract_text_from_txt(file_path)
@@ -41,7 +45,7 @@ def process_file(file_path):
         raise ValueError(f"Unsupported file type: {file_extension}")
 
 def extract_text_from_pdf(file_path):
-    logger.info("Order - 2 : Extracting text from the Files - pdf")
+    logger.info("Order - 2 : Extracting text from the File - pdf")
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -68,16 +72,22 @@ def extract_text_from_pdf(file_path):
         
     except Exception as e:
         raise ValueError(f"Error reading PDF file: {str(e)}")
-
+    
 def extract_text_from_txt(file_path):
-    logger.info("Order - 2 : Extracting text from the Files - txt")
+    logger.info("Order - 2 : Extracting text from the File - txt")
+
+    # Check if the file path is the file_names.txt, and skip it.
+    if file_path == "uploaded_files/docs/file_names.txt":
+        logger.info(f"Skipping processing for file_names.txt: {file_path}")
+        return  # Exit the function without processing
+
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
     with open(file_path, 'r', encoding='utf-8') as file:
         content = file.read()
-    
-    paragraphs = content.split('\n\n')  
+
+    paragraphs = content.split('\n\n')
 
     # Format text to save it as structured
     formatted_text = "\n\n".join(paragraphs)
@@ -86,7 +96,7 @@ def extract_text_from_txt(file_path):
     save_output(formatted_text, os.path.basename(file_path))  # Pass file_name here
 
 def extract_text_from_docx_or_doc(file_path):
-    logger.info("Order - 2 : Extracting text from the Files - docx or doc")
+    logger.info("Order - 2 : Extracting text from the File - docx or doc")
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
@@ -136,16 +146,16 @@ def extract_text_from_docx_or_doc(file_path):
     save_output(formatted_text, structured_elements['file_name'])  # Pass file_name here
 
 def save_output(formatted_text, file_name):
-    logger.info("Order - 3 : Saving new file as _Formatted and appending to files_combined_formatted.txt")
+    logger.info("Order - 3 : Saving Formatted and appending text to files_combined_formatted.txt")
 
     if not formatted_text.strip():
         logger.warning("No content to save.")
         return
 
-    # Ensure the upload directory exists
-    ensure_directory_exists(UPLOAD_DIR)
+    # Ensure the output directory exists
+    ensure_directory_exists(OUTPUT_DIR)
     
-    combined_file_path = os.path.join(UPLOAD_DIR, "files_combined_formatted.txt")  # Output file for all content
+    combined_file_path = os.path.join(OUTPUT_DIR, "files_combined_formatted.txt")  # Output file for all content
 
     try:
         # Open the combined formatted text file in append mode and write the formatted content

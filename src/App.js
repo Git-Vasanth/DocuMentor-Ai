@@ -8,6 +8,7 @@ import Chat from './chat';
 import ProtectedRoute from './protectedroute'
 import ChatInterface from './chatopen'
 import fontest  from './font-test';
+import Profile from "./profile-test"
 
 
 const darkTheme = createTheme({
@@ -27,7 +28,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/chat" element={<ProtectedRoute component={Chat} />} />
           <Route path='/chatopen' element={<ProtectedRoute component={ChatInterface} />} />
-          <Route path='/font-test' element={<ProtectedRoute component={fontest} />} />
+          <Route path='/profile-test' element={<ProtectedRoute component={Profile} />} />
 
         </Routes>
       </Router>
