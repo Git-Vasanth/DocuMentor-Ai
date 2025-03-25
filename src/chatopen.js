@@ -12,7 +12,9 @@ import { LuSettings } from "react-icons/lu";
 import { getFirestore, collection, addDoc, query, orderBy, getDocs } from "firebase/database";
 import { db } from "./firebase.config";
 import Profile from './profile-test'; // Import Profile-test component
-import FileUploadWindow from './fileuploadform'
+import FileUploadWindow from './fileuploadform';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import ReactMarkdown from 'react-markdown';
 
 const ChatContainer = styled(Paper)(({ theme }) => ({
   height: "93vh",
@@ -21,6 +23,16 @@ const ChatContainer = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(2),
   backgroundColor: "",  
   borderRadius: "16px",
+}));
+
+const Overlay = styled(Box)(({ theme }) => ({
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: "rgba(0, 0, 0, 0.5)",  // Dimming effect
+  zIndex: 999,  // Make sure it's on top of other elements
 }));
 
 const MessagesContainer = styled(Box)({
@@ -32,28 +44,30 @@ const MessagesContainer = styled(Box)({
   flexDirection: "column"
 });
 
+// Message Bubble component to display each message
 const MessageBubble = memo(({ isUser, text }) => (
   <Box
-    maxWidth="70%"
-    margin="0.5rem"
-    padding="0.8rem"
-    borderRadius="1rem"
-    backgroundColor={isUser ? "#1976d2" : "#fff"}
-    color={isUser ? "#fff" : "#000"}
     alignSelf={isUser ? "flex-start" : "flex-end"}
-    boxShadow="0 1px 2px rgba(0,0,0,0.1)"
-    display="flex"
-    alignItems="center"
-    gap="0.5rem"
+    maxWidth="80%"
+    margin="0.4rem 0rem"
   >
-    {!isUser && (
-      <Avatar sx={{ bgcolor: "#1976d2", width: 30, height: 30 }}>
-        <GiRobotHelmet size={20} />
-      </Avatar>
-    )}
-    <Typography variant="body1" sx={{ fontFamily: "Courier New, Courier, monospace" }}>
-      {text}
-    </Typography>
+    <Box
+      padding="0.6rem 0.6rem"
+      borderRadius="16px"
+      backgroundColor={isUser ? "#e0f2fe" : "#f0f0f0"}
+    >
+      <Typography
+        variant="body1"
+        sx={{
+          fontFamily: "Courier New, Courier, monospace",
+          fontSize: "0.9rem",
+          wordWrap: "break-word",
+          color: "#333",
+        }}
+      >
+        <ReactMarkdown>{text}</ReactMarkdown>
+      </Typography>
+    </Box>
   </Box>
 ));
 
@@ -85,8 +99,6 @@ const SuggestionsContainer = styled(Stack)(({ theme }) => ({
   },
 }));
 
-
-
 const StyledInput = styled("textarea")({
   border: "none",
   backgroundColor: "transparent",
@@ -96,7 +108,6 @@ const StyledInput = styled("textarea")({
   outline: "none",
   width: "100%",
   fontFamily: "Courier New, Courier, monospace", // Ensure Courier font for input
- //choose this for the presentation  fontWeight: 600,
   resize: "none",  // Prevent resizing
   minHeight: "50px", // Minimum height for textarea
   "&::placeholder": {
@@ -154,6 +165,7 @@ const ChatInterface = () => {
   const messagesEndRef = useRef(null);
   const [showProfile, setShowProfile] = useState(false); // State for Profile visibility
   const [showFileUpload, setShowFileUpload] = useState(false);
+  const [userId, setUserId] = useState(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -174,6 +186,26 @@ const ChatInterface = () => {
     return () => clearInterval(typingInterval);
   }, []);
 
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+        if (user) {
+            setUserId(user.uid);
+        } else {
+            setUserId(null);
+        }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (userId) {
+      // Send an initial message to the AI when the user logs in
+      sendInitialMessage();
+    }
+  }, [userId]);
+
   const generateBotResponse = (userMessage) => {
     setIsTyping(true);
     setTimeout(() => {
@@ -188,13 +220,63 @@ const ChatInterface = () => {
     }, 1000);
   };
 
-  const handleSendMessage = () => {
-    if (inputValue.trim()) {
-      setMessages(prev => [...prev, { text: inputValue, isUser: true }]);
-      generateBotResponse(inputValue);
-      setInputValue("");
+  const sendInitialMessage = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/docai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ input: "Introduce yourself in a warm and welcoming way.", user_id: userId }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const aiResponse = data.generated_code;
+        setMessages((prev) => [...prev, { text: aiResponse, isUser: false }]);
+      } else {
+        console.error('Error:', response.status);
+      }
+    } catch (error) {
+      console.error('Network error:', error);
     }
   };
+
+  const handleSendMessage = async () => {
+    if (inputValue.trim()) {
+        const userMessage = inputValue; // Store the input value
+        setInputValue('');
+        setMessages((prev) => [...prev, { text: inputValue, isUser: true }]);
+
+        if (userId) { // Check if user is logged in
+            try {
+                const response = await fetch('http://127.0.0.1:5000/docai', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ input: inputValue, user_id: userId }), // Use Firebase UID
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const aiResponse = data.generated_code;
+                    setMessages((prev) => [...prev, { text: aiResponse, isUser: false }]);
+                } else {
+                    console.error('Error:', response.status);
+                }
+            } catch (error) {
+                console.error('Network error:', error);
+            }
+        } else {
+            console.log("User not logged in.");
+            // Optionally, display a message to the user that they need to log in.
+        }
+
+        setInputValue('');
+    }
+  };
+
 
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -214,7 +296,6 @@ const ChatInterface = () => {
     setShowProfile(prev => !prev); // Toggle the state of the profile visibility
   };
   
-  
   // Function to close the profile window
   const handleCloseProfile = () => {
     setShowProfile(false); // Close profile window
@@ -226,7 +307,7 @@ const ChatInterface = () => {
 
   const handleCloseFileUpload = () => {
     setShowFileUpload(false); // close the upload window.
-  }
+  };
 
   return (
     <Container maxWidth="xl" sx={{ marginTop: "20px" }}>
@@ -238,7 +319,7 @@ const ChatInterface = () => {
               <IconButton color="primary" sx={{ marginRight: "10px" }} aria-label="user profile" onClick={handleProfileClick}>
                 <FaUserCircle size={24} />
               </IconButton>
-              <IconButton sx={{ marginRight: "10px" }} aria-label="world upload" onClick={handleFileUploadToggle} >
+              <IconButton sx={{ marginRight: "10px" }} aria-label="world upload" onClick={handleFileUploadToggle}>
                 <TbWorldUpload size={24} />
               </IconButton>
             </Box>
@@ -264,9 +345,11 @@ const ChatInterface = () => {
         </HeaderContainer>
 
         {/* Profile Section - Conditionally Rendered */}
+        {showProfile && <Overlay />}
         {showProfile && <Profile onClose={handleCloseProfile} />}
 
-         {/* Upload Section - Conditionally Rendered */}
+        {/* Upload Section - Conditionally Rendered */}
+        {showFileUpload && <Overlay />}
         {showFileUpload && <FileUploadWindow onClose={handleCloseFileUpload} />}
 
         {/* Messages Section */}

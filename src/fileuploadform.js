@@ -171,7 +171,7 @@ function FileUploadWindow({ onClose, onLogout }) {
         const processResult = await processResponse.json();
         console.log('Process Success:', processResult);
       }
-  
+/*  
       if (selectedButtons[2]) {
         const buildResponse = await fetch('http://127.0.0.1:5000/build', {
           method: 'POST',
@@ -186,7 +186,7 @@ function FileUploadWindow({ onClose, onLogout }) {
         const buildResult = await buildResponse.json();
         console.log('Build Success:', buildResult);
       }
-  
+*/  
       if (selectedButtons[3]) {
         const destroyResponse = await fetch('http://127.0.0.1:5000/destroy', {
           method: 'POST',

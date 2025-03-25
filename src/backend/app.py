@@ -6,7 +6,8 @@ from flask_cors import CORS
 from file_cleaning import process_file
 from url_cleaning import extract_text_from_url, format_text as url_format_text, save_output as url_save_output, process_urls
 from embeddings import build_and_save
-from docai import pref_message
+import conqa
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -85,29 +86,28 @@ def upload():
 
 @app.route('/process', methods=['POST'])
 def process_documents_and_urls():
-
     logger.info("In the Process Function")
-
     try:
         # Process files
         for file_path in os.listdir("uploaded_files/docs"):
             if file_path.endswith((".docx", ".pdf", ".txt", ".doc")):
-                content = process_file(f"uploaded_files/docs/{file_path}")
+                process_file(f"uploaded_files/docs/{file_path}")
 
         # Process URLs
         urls = []
         with open("uploaded_files/urls/urls.txt", "r") as url_file:
             urls = [url.strip() for url in url_file.readlines()]
-
         if urls:
             process_urls(urls)
 
-        return jsonify({"message": "Files and URLs processed and formatted successfully."})
+        # Update vector store after processing
+        conqa.update_vector_store()
 
+        return jsonify({"message": "Files and URLs processed and formatted successfully."})
     except Exception as e:
         return jsonify({"message": str(e)}), 500
-    
-
+        
+"""
 @app.route('/build',methods=['POST'])
 def build():
 
@@ -118,6 +118,7 @@ def build():
         return jsonify({"message": "Documents processed successfully."}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+"""
 
 @app.route('/destroy',methods=['POST'])
 def destroy():
@@ -136,7 +137,7 @@ def prefai():
 
         if message:
             # Send the message to process_message in docai.py
-            user_pref = pref_message(message)  # Call the function from docai.py
+            user_pref = conqa.pref_message(message)  # Call the function from docai.py
             return jsonify({"response": user_pref}), 200
         else:
             return jsonify({"error": "No message provided"}), 400
@@ -145,21 +146,24 @@ def prefai():
         return jsonify({"error": "An error occurred while processing the request."}), 500
 
 @app.route('/docai', methods=['POST'])
-def sendai():
 
-    logger.info("In the SendAi Function")
+def aichat():
+    data = request.get_json()
+    user_id = data.get('user_id', 'default_user')
+    user_input = data.get('input', '')
 
-    pass
+    ai_response, updated_history = conqa.process_user_message(user_input, [], user_id) #pass empty list for initial history.
 
+    return jsonify({'generated_code': ai_response})
+def construct_prompt(messages):
+    #construct the prompt using messages
+    return "prompt"
+
+def get_llm_response(prompt):
+    #send prompt to LLM, and get response.
+    return "LLM response"
+    
 """
-@app.route('/docai',methods=['GET'])
-def getai():
-
-    logger.info("In the GetAi Function")
-
-    pass
-
-
 @app.route('/logout', methods=['POST'])
 def logout():
 

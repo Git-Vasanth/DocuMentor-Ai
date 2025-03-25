@@ -49,7 +49,7 @@ const Profile = ({ onClose, onLogout, onSendInfo, onSave }) => {
   };
 
   const handleSendInfo = () => {
-    const message = `User ${userName} has ${proficiency} level knowledge and wants to study in a ${studyMode} way.`;
+    const message = `User with username ${userName} has ${proficiency} level knowledge and wants to study in a ${studyMode} way.`;
   
     fetch('http://127.0.0.1:5000/prefai', {
       method: 'POST',
@@ -94,7 +94,7 @@ const Profile = ({ onClose, onLogout, onSendInfo, onSave }) => {
       sx={{
         width:470, // Width of the profile window
         padding: '20px', // Padding inside the window
-        backgroundColor: '#333', // Solid background color for opacity
+        backgroundColor: '#000', // Solid background color for opacity
         color: '#fff', // Text color (default is white, change as needed)
         borderRadius: '16px', // Border radius for rounded corners
         boxShadow: '2px 2px 20px rgba(0, 0, 0, 0.3)', // Shadow effect for the profile window

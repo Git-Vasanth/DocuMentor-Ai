@@ -26,16 +26,7 @@ formatted_urls_file_path = r"M:\Projects\documentor-ai\documentor-ai\src\backend
 
 
 def read_add_files(file1_path: str, file2_path: str) -> str:
-    """
-    Reads the contents of two text files and returns their combined content.
 
-    Args:
-        file1_path (str): Path to the first text file.
-        file2_path (str): Path to the second text file.
-
-    Returns:
-        str: The combined content of the two files.
-    """
     logging.info("Order : 1 - Reading and adding contents of two files.")
 
     try:
