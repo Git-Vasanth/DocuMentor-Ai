@@ -1,12 +1,12 @@
 import os
 import logging
-import uuid 
+import uuid
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from file_cleaning import process_file
-from url_cleaning import extract_text_from_url, format_text as url_format_text, save_output as url_save_output, process_urls
-from embeddings import build_and_save
+from url_cleaning import process_urls
 import conqa
+import shutil
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,10 +14,28 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-os.makedirs("uploaded_files/docs", exist_ok=True)
-os.makedirs("uploaded_files/urls", exist_ok=True)
-os.makedirs("uploaded_files/embds",exist_ok=True)
-os.makedirs("uploaded_files/formatted",exist_ok=True)
+# Ensure base directories exist
+os.makedirs("uploaded_files/docs/new", exist_ok=True)
+os.makedirs("uploaded_files/docs/old", exist_ok=True)
+os.makedirs("uploaded_files/urls/new", exist_ok=True)
+os.makedirs("uploaded_files/urls/old", exist_ok=True)
+os.makedirs("uploaded_files/formatted/individual_files", exist_ok=True)
+os.makedirs("uploaded_files/formatted/individual_urls", exist_ok=True)
+os.makedirs("uploaded_files/embds", exist_ok=True)
+os.makedirs("uploaded_files/formatted", exist_ok=True) # Keep this for potential combined files
+
+PROCESSED_FILES_PATH = "uploaded_files/docs/processed_files.txt"
+PROCESSED_URLS_PATH = "uploaded_files/urls/processed_urls.txt"
+
+def load_processed_items(filepath):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as f:
+            return set(f.read().splitlines())
+    return set()
+
+def save_processed_items(filepath, items):
+    with open(filepath, "w") as f:
+        f.write("\n".join(items))
 
 @app.route('/upload', methods=['POST'])
 def upload():
@@ -26,118 +44,149 @@ def upload():
     try:
         files = request.files.getlist("files")
         urls = request.form.getlist("urls")
-        file_paths = []
-        url_file_path = "uploaded_files/urls/urls.txt"
-        file_names_path = "uploaded_files/docs/file_names.txt"
+        new_url_file_path = "uploaded_files/urls/new/urls.txt"
+        new_file_names_path = "uploaded_files/docs/new/file_names.txt"
 
-        # Ensure directories exist
-        os.makedirs(os.path.dirname(url_file_path), exist_ok=True)
-        os.makedirs(os.path.dirname(file_names_path), exist_ok=True)
+        os.makedirs(os.path.dirname(new_url_file_path), exist_ok=True)
+        os.makedirs(os.path.dirname(new_file_names_path), exist_ok=True)
 
-        # Handle file uploads
-        if files:
-            # Load existing file names
-            if os.path.exists(file_names_path):
-                with open(file_names_path, "r") as file_names_file:
-                    existing_file_names = set(file_names_file.read().splitlines())
-            else:
-                existing_file_names = set()
+        # Handle file uploads to 'new'
+        existing_new_file_names = set()
+        if os.path.exists(new_file_names_path):
+            with open(new_file_names_path, "r") as f:
+                existing_new_file_names = set(f.read().splitlines())
 
-            for file in files:
-                if file.filename in existing_file_names:
-                    return jsonify({"message": f"The file {file.filename} has already been uploaded."}), 400
+        for file in files:
+            if file.filename in existing_new_file_names:
+                return jsonify({"message": f"The file {file.filename} has already been uploaded (in this session)."}), 400
+            new_file_path = f"uploaded_files/docs/new/{file.filename}"
+            file.save(new_file_path)
+            with open(new_file_names_path, "a") as f:
+                f.write(file.filename + "\n")
+        logger.info("Files saved to uploaded_files/docs/new/")
 
-                file_path = f"uploaded_files/docs/{file.filename}"
-                file.save(file_path)
-                file_paths.append(file_path)
+        # Handle URL uploads to 'new/urls.txt'
+        existing_new_urls = set()
+        if os.path.exists(new_url_file_path):
+            with open(new_url_file_path, "r") as f:
+                existing_new_urls = set(line.strip() for line in f.readlines())
 
-                # Append the file name to the file_names.txt
-                with open(file_names_path, "a") as file_names_file:
-                    file_names_file.write(file.filename + "\n")
-
-            logger.info("Files are Saved in Docs")
-
-        # Handle URL uploads
-        if urls:
-            # Read existing URLs from the file
-            if os.path.exists(url_file_path):
-                with open(url_file_path, "r") as url_file:
-                    existing_urls = set(url_file.readlines())  # Using set to avoid duplicates
-            else:
-                existing_urls = set()
-
-            # Check for duplicate URLs and reject them
+        with open(new_url_file_path, "a") as f:
             for url in urls:
-                if url + "\n" in existing_urls:
-                    return jsonify({"message": f"The URL {url} has already been uploaded."}), 400
+                if url not in existing_new_urls:
+                    f.write(url + "\n")
+                    existing_new_urls.add(url)
+        logger.info("Urls saved to uploaded_files/urls/new/urls.txt")
 
-            # If no duplicates, append the new URLs to the file
-            with open(url_file_path, "a") as url_file:
-                for url in urls:
-                    url_file.write(url + "\n")
-
-            logger.info("Urls are Saved in Urls")
-
-        return jsonify({"message": "Files and URLs uploaded successfully."})
+        return jsonify({"message": "Files and URLs uploaded successfully to 'new' directories."})
 
     except Exception as e:
         return jsonify({"message": str(e)}), 500
-    
 
 @app.route('/process', methods=['POST'])
 def process_documents_and_urls():
     logger.info("In the Process Function")
     try:
-        # Process files
-        for file_path in os.listdir("uploaded_files/docs"):
-            if file_path.endswith((".docx", ".pdf", ".txt", ".doc")):
-                process_file(f"uploaded_files/docs/{file_path}")
+        new_docs_dir = "uploaded_files/docs/new/"
+        old_docs_dir = "uploaded_files/docs/old/"
+        new_urls_file = "uploaded_files/urls/new/urls.txt"
 
-        # Process URLs
-        urls = []
-        with open("uploaded_files/urls/urls.txt", "r") as url_file:
-            urls = [url.strip() for url in url_file.readlines()]
-        if urls:
-            process_urls(urls)
+        processed_files = load_processed_items(PROCESSED_FILES_PATH)
+        processed_urls = load_processed_items(PROCESSED_URLS_PATH)
 
-        # Update vector store after processing
-        conqa.update_vector_store()
+        newly_processed_files = []
+        newly_processed_urls = []
+        formatted_file_paths = []
+        formatted_url_paths = {}
 
-        return jsonify({"message": "Files and URLs processed and formatted successfully."})
+        # --- Process Files ---
+        if os.path.exists(new_docs_dir):
+            new_files = [f for f in os.listdir(new_docs_dir) if os.path.isfile(os.path.join(new_docs_dir, f))]
+            if not os.path.exists(old_docs_dir):
+                os.makedirs(old_docs_dir)
+
+            files_to_process = []
+            for filename in new_files:
+                if filename not in processed_files:
+                    files_to_process.append(filename)
+
+            for filename in files_to_process:
+                new_file_path = os.path.join(new_docs_dir, filename)
+                formatted_path = process_file(new_file_path)
+                if formatted_path:
+                    formatted_file_paths.append(formatted_path)
+                    newly_processed_files.append(filename)
+                # Move processed files to 'old' regardless of successful formatting
+                old_path = os.path.join(old_docs_dir, filename)
+                new_path = os.path.join(new_docs_dir, filename)
+                try:
+                    shutil.move(new_path, old_path)
+                    logger.info(f"Moved {filename} from new to old.")
+                except Exception as e:
+                    logger.error(f"Error moving {filename} from new to old: {e}")
+
+            # Clean up new directory
+            if os.path.exists(new_docs_dir) and not os.listdir(new_docs_dir):
+                try:
+                    os.rmdir(new_docs_dir)
+                    os.makedirs(new_docs_dir, exist_ok=True) # Recreate it
+                    logger.info("Cleared and recreated the 'new/docs' directory.")
+                except OSError as e:
+                    logger.warning(f"Could not clear 'new/docs' directory: {e}")
+            elif os.path.exists(new_docs_dir) and os.listdir(new_docs_dir):
+                logger.warning("'new/docs' directory is not empty after processing.")
+
+        # --- Process URLs ---
+        if os.path.exists(new_urls_file):
+            with open(new_urls_file, "r") as f:
+                urls_to_process = [url.strip() for url in f.readlines() if url.strip() not in processed_urls]
+
+            processed_url_results = process_urls(urls_to_process)
+            for url, formatted_path in processed_url_results.items():
+                if formatted_path:
+                    formatted_url_paths[url] = formatted_path
+                    newly_processed_urls.append(url)
+
+            # Move processed URLs to 'old'
+            old_urls_file = "uploaded_files/urls/old/urls.txt"
+            os.makedirs(os.path.dirname(old_urls_file), exist_ok=True)
+            with open(old_urls_file, "a") as f:
+                for url in urls_to_process:
+                    f.write(url + "\n")
+            logger.info(f"Processed and added new URLs to {old_urls_file}")
+
+            # Clear the 'new' URLs file
+            open(new_urls_file, 'w').close()
+            logger.info(f"Cleared {new_urls_file}")
+
+        # Update vector store with newly processed content
+        conqa.update_vector_store(formatted_file_paths=formatted_file_paths, formatted_url_paths=formatted_url_paths)
+
+        # Update processed items lists
+        processed_files.update(newly_processed_files)
+        processed_urls.update(newly_processed_urls)
+        save_processed_items(PROCESSED_FILES_PATH, processed_files)
+        save_processed_items(PROCESSED_URLS_PATH, processed_urls)
+
+        return jsonify({"message": "Files and URLs processed and vector store updated incrementally."})
     except Exception as e:
+        logger.error(f"Error in process function: {e}")
         return jsonify({"message": str(e)}), 500
-        
-"""
-@app.route('/build',methods=['POST'])
-def build():
-
-    logger.info("In the Build Function")
-
-    try:
-        build_and_save()
-        return jsonify({"message": "Documents processed successfully."}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-"""
 
 @app.route('/destroy',methods=['POST'])
 def destroy():
-
     logger.info("In the Destroy Function")
-
     pass
 
 @app.route('/prefai',methods=['POST'])
 def prefai():
-
     logger.info("In the PrefAi Function")
     try:
         data = request.get_json()
         message = data.get('message', '')
 
         if message:
-            # Send the message to process_message in docai.py
-            user_pref = conqa.pref_message(message)  # Call the function from docai.py
+            user_pref = conqa.pref_message(message)  # Call the function from conqa.py
             return jsonify({"response": user_pref}), 200
         else:
             return jsonify({"error": "No message provided"}), 400
@@ -146,7 +195,6 @@ def prefai():
         return jsonify({"error": "An error occurred while processing the request."}), 500
 
 @app.route('/docai', methods=['POST'])
-
 def aichat():
     data = request.get_json()
     user_id = data.get('user_id', 'default_user')
@@ -155,38 +203,6 @@ def aichat():
     ai_response, updated_history = conqa.process_user_message(user_input, [], user_id) #pass empty list for initial history.
 
     return jsonify({'generated_code': ai_response})
-def construct_prompt(messages):
-    #construct the prompt using messages
-    return "prompt"
 
-def get_llm_response(prompt):
-    #send prompt to LLM, and get response.
-    return "LLM response"
-    
-"""
-@app.route('/logout', methods=['POST'])
-def logout():
-
-    logger.info("In the Logout Function")
-
-    try:
-        # Clear uploaded files and URLs
-        docs_folder = "uploaded_files/docs"
-        if os.path.exists(docs_folder):
-            for filename in os.listdir(docs_folder):
-                file_path = os.path.join(docs_folder, filename)
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
-
-        urls_file = "uploaded_files/urls/urls.txt"
-        if os.path.exists(urls_file):
-            open(urls_file, 'w').close()
-
-        return jsonify({"message": "Logged out and data cleared."})
-
-    except Exception as e:
-        return jsonify({"message": str(e)}), 500
-
-"""
 if __name__ == '__main__':
     app.run(debug=True)

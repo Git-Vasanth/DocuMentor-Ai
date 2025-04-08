@@ -99,12 +99,16 @@ const SignUp = () => {
       await updateProfile(user, {
         displayName: name
       });
-
-      // Save user info in Realtime Database
-      await set(ref(db, 'users/' + user.uid), {
-        displayName: name,
-        email: email,
-      });
+      
+      try {
+        await set(ref(db, 'users/' + user.uid), {
+          displayName: name,
+          email: email,
+        });
+        console.log("user data written successfully");
+      } catch (error) {
+        console.error('Error writing user data:', error);
+      }
 
       // Reset form fields
       setName('');

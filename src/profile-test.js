@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Box, Typography, Radio, RadioGroup, FormControlLabel, FormControl, Button, IconButton, Stack } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { auth } from './firebase.config'; // Correct import for Firebase authentication
-import { onAuthStateChanged } from 'firebase/auth'; // Import the required Firebase authentication method
+import { signOut,onAuthStateChanged } from 'firebase/auth'; // Import the required Firebase authentication method
 import { Alert } from '@mui/material';
+import { getDatabase, ref, update, get } from 'firebase/database';
+
 
 const Profile = ({ onClose, onLogout, onSendInfo, onSave }) => {
   // States for status, proficiency, study mode, and username
@@ -12,21 +14,54 @@ const Profile = ({ onClose, onLogout, onSendInfo, onSave }) => {
   const [studyMode, setStudyMode] = useState(''); // No default value for study mode
   const [userName, setUserName] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
-  const [alertSeverity, setAlertSeverity] = useState(''); // Add this state
+  const [alertSeverity, setAlertSeverity] = useState('');
+  const [userId, setUserId] = useState(null);
+  const [sessionId, setSessionId] = useState(null); // Add this state
 
 
   useEffect(() => {
-    // Listen for authentication state changes to get the user's name
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setUserName(user.displayName || 'Guest'); // Set the user's display name or default to 'Guest'
+        setUserName(user.displayName || 'Guest');
+        setUserId(user.uid);
+        console.log("User Id is:", user.uid); // Added log
+        fetchSessionId(user.uid);
       } else {
-        setUserName('Guest'); // If no user is logged in, set as 'Guest'
+        setUserName('Guest');
+        setUserId(null);
+        setSessionId(null);
       }
     });
 
-    return () => unsubscribe(); // Clean up the listener on component unmount
+    return () => unsubscribe();
   }, []);
+
+  const fetchSessionId = async (uid) => {
+    const db = getDatabase();
+    const sessionsRef = ref(db, `users/${uid}/sessions`); // Correct path
+  
+    try {
+      const snapshot = await get(sessionsRef);
+      if (snapshot.exists()) {
+        const sessions = snapshot.val();
+        let latestSessionId = null;
+        let latestLoginTime = null;
+  
+        for (const sessionId in sessions) {
+          const loginTime = new Date(sessions[sessionId].loginTime).getTime();
+          if (!latestLoginTime || loginTime > latestLoginTime) {
+            latestLoginTime = loginTime;
+            latestSessionId = sessionId;
+          }
+        }
+        console.log("session Id is:", latestSessionId); //added log
+        setSessionId(latestSessionId);
+      }
+    } catch (error) {
+      console.error('Error fetching session ID:', error);
+    }
+  };
+
 
   // Handle changes for the status radio buttons
   const handleStatusChange = (event) => {
@@ -78,10 +113,47 @@ const Profile = ({ onClose, onLogout, onSendInfo, onSave }) => {
     setStudyMode('');
   };
 
+  const handleLogout = () => {
+    console.log("logout button pressed");
+    console.log(userId, sessionId);
+    if (!userId || !sessionId) {
+      console.error('User ID or Session ID not available.');
+      return;
+    }
   
+    const db = getDatabase();
+    const sessionRef = ref(db, `users/${userId}/sessions/${sessionId}`); // Correct path
+    const logoutTime = new Date().toISOString();
   
+    get(ref(db, `users/${userId}/sessions/${sessionId}/loginTime`)).then((snapshot) => { // Correct path
+      if (snapshot.exists()) {
+        const loginTime = new Date(snapshot.val());
+        const duration = new Date(logoutTime).getTime() - loginTime.getTime();
+        const durationInSeconds = Math.round(duration / 1000);
   
-
+        update(sessionRef, { logoutTime: logoutTime, sessionDuration: durationInSeconds })
+          .then(() => {
+            console.log('Logout time and session duration updated successfully.');
+            signOut(auth)
+              .then(() => {
+                console.log('User signed out successfully.');
+                onClose();
+              })
+              .catch((error) => {
+                console.error('Error signing out:', error);
+              });
+          })
+          .catch((error) => {
+            console.error('Error updating logout time:', error);
+          });
+      } else {
+        console.log("No data available");
+      }
+    }).catch((error) => {
+      console.error(error);
+    });
+  };
+  
   const handleReset = () => {
     // Reset all selections to default (empty string or "no selection")
     setStatus('');

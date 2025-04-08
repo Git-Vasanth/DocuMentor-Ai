@@ -305,10 +305,7 @@ function FileUploadWindow({ onClose, onLogout }) {
               control={<Checkbox checked={selectedButtons[1]} onChange={handleProcessCheckbox} disabled={areCheckboxesDisabled} />}
               label="Process"
             />
-            <FormControlLabel
-              control={<Checkbox checked={selectedButtons[2]} onChange={handleBuildCheckbox} disabled={areCheckboxesDisabled} />}
-              label="Build"
-            />
+
             <FormControlLabel
               control={<Checkbox checked={selectedButtons[3]} onChange={handleDestroyCheckbox} disabled={areCheckboxesDisabled} />}
               label="Destroy"
