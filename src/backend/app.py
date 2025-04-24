@@ -1,18 +1,26 @@
 import os
 import logging
-import uuid
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,send_file
 from flask_cors import CORS
 from file_cleaning import process_file
 from url_cleaning import process_urls
-import conqa
+from conqa import process_user_message,update_vector_store,pref_message,create_empty_faiss_index,create_empty_pkl_file
 import shutil
+import firebase_admin
+from firebase_admin import credentials, firestore
+import pdfkit
+from io import BytesIO
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
+
+# Firebase Admin SDK init
+cred = credentials.Certificate(r"M:\Projects\documentor-ai\documentor-ai\src\documentor-a37cc-firebase-adminsdk-fbsvc-7a30a61f23.json")
+firebase_admin.initialize_app(cred)
+db = firestore.client()
 
 # Ensure base directories exist
 os.makedirs("uploaded_files/docs/new", exist_ok=True)
@@ -26,6 +34,9 @@ os.makedirs("uploaded_files/formatted", exist_ok=True) # Keep this for potential
 
 PROCESSED_FILES_PATH = "uploaded_files/docs/processed_files.txt"
 PROCESSED_URLS_PATH = "uploaded_files/urls/processed_urls.txt"
+
+create_empty_faiss_index()
+create_empty_pkl_file()
 
 def load_processed_items(filepath):
     if os.path.exists(filepath):
@@ -160,7 +171,7 @@ def process_documents_and_urls():
             logger.info(f"Cleared {new_urls_file}")
 
         # Update vector store with newly processed content
-        conqa.update_vector_store(formatted_file_paths=formatted_file_paths, formatted_url_paths=formatted_url_paths)
+        update_vector_store(formatted_file_paths=formatted_file_paths, formatted_url_paths=formatted_url_paths)
 
         # Update processed items lists
         processed_files.update(newly_processed_files)
@@ -186,7 +197,7 @@ def prefai():
         message = data.get('message', '')
 
         if message:
-            user_pref = conqa.pref_message(message)  # Call the function from conqa.py
+            user_pref = pref_message(message)  # Call the function from conqa.py
             return jsonify({"response": user_pref}), 200
         else:
             return jsonify({"error": "No message provided"}), 400
@@ -197,12 +208,77 @@ def prefai():
 @app.route('/docai', methods=['POST'])
 def aichat():
     data = request.get_json()
+    user_message = data.get('input') 
+    chat_history = data.get('chat_history', [])
     user_id = data.get('user_id', 'default_user')
-    user_input = data.get('input', '')
 
-    ai_response, updated_history = conqa.process_user_message(user_input, [], user_id) #pass empty list for initial history.
+    if not user_message:
+        return jsonify({'error': 'Message is required'}), 400
 
-    return jsonify({'generated_code': ai_response})
+    try:
+        response_data = process_user_message(user_message, chat_history, user_id)
+        return jsonify({'generated_code': response_data['answer']})
+    except Exception as e:
+        print(f"Error in /docai route: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/download_chat', methods=['POST'])
+def download_chat():
+    try:
+        data = request.get_json()
+        user_id = data.get('userId')
+        session_id = data.get('sessionId')
+        messages = data.get('messages', [])
+
+        if not user_id or not session_id:
+            return jsonify({"error": "User ID and Session ID are required."}), 400
+
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Chat History</title>
+            <style>
+                body { font-family: sans-serif; }
+                .message { margin-bottom: 10px; padding: 8px; border-radius: 5px; }
+                .user { background-color: #e0f2fe; }
+                .ai { background-color: #f0f0f0; }
+                .sender { font-weight: bold; margin-right: 5px; }
+            </style>
+        </head>
+        <body>
+            <h1>Chat History</h1>
+        """
+
+        for message in messages:
+            sender = "You" if message.get('isUser') else "AI"
+            text = message.get('text', '')
+            html_content += f'<div class="message {"user" if message.get("isUser") else "ai"}">'
+            html_content += f'<span class="sender">{sender}:</span> {text}'
+            html_content += '</div>'
+
+        html_content += """
+        </body>
+        </html>
+        """
+
+        buffer = BytesIO()
+        path_wkhtmltopdf = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
+        config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
+        pdfkit.from_string(html_content, buffer, configuration=config) # Correct way to write to buffer
+        buffer.seek(0)
+
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"chat_{session_id}.pdf"
+        )
+
+    except Exception as e:
+        print(f"Error generating PDF with PDFKit: {e}")
+        return jsonify({"error": "Failed to generate PDF."}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -4,10 +4,10 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Home from './home'; 
 import SignUp from "./signup"
 import Login from "./login"
-import Chat from './chat';
 import ProtectedRoute from './protectedroute'
 import ChatInterface from './chatopen_withscores'
 import Profile from "./profile-test"
+import chat from "./chat"
 
 
 const darkTheme = createTheme({
@@ -25,9 +25,9 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/chat" element={<ProtectedRoute component={Chat} />} />
-          <Route path='/chatopen' element={<ProtectedRoute component={ChatInterface} />} />
+          <Route path='/chat' element={<ProtectedRoute component={ChatInterface} />} />
           <Route path='/profile-test' element={<ProtectedRoute component={Profile} />} />
+          <Route path='/chat_lt' element={<ProtectedRoute component={chat} />} />
         </Routes>
       </Router>
     </ThemeProvider>

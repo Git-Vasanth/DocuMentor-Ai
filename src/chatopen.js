@@ -9,8 +9,6 @@ import { TbWorldUpload } from "react-icons/tb";
 import { MdDownloading } from "react-icons/md";
 import { GiMoebiusTriangle } from "react-icons/gi";
 import { LuSettings } from "react-icons/lu";
-import { getFirestore, collection, addDoc, query, orderBy, getDocs } from "firebase/database";
-import { db } from "./firebase.config";
 import Profile from './profile-test'; // Import Profile-test component
 import FileUploadWindow from './fileuploadform';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';

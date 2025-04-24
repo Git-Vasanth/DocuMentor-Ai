@@ -13,6 +13,7 @@ import Profile from './profile-test'; // Import Profile-test component
 import FileUploadWindow from './fileuploadform';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import ReactMarkdown from 'react-markdown';
+import { getDatabase, ref, push, set, get, child, query, orderByKey, limitToLast, orderByChild, startAt, endAt } from "firebase/database";
 
 const ChatContainer = styled(Paper)(({ theme }) => ({
   height: "93vh",
@@ -110,6 +111,8 @@ const InputContainer = styled(Box)({
   gap: "1rem"
 });
 
+
+
 const SuggestionsContainer = styled(Stack)(({ theme }) => ({
   display: "flex",
   flexDirection: "row",
@@ -179,12 +182,12 @@ const handleKeyPress = (e) => {
 const HeaderContainer = styled(Box)(({ theme }) => ({
   display: "flex",
   alignItems: "center",
-  justifyContent: "center", // Center the content horizontally
+  justifyContent: "center", 
   marginBottom: theme.spacing(2),
   paddingBottom: theme.spacing(1),
   borderBottom: `1px solid ${theme.palette.divider}`,
   width: "100%",
-  backgroundColor: "transparent", // No background box here
+  backgroundColor: "transparent", 
 }));
 
 const ChatInterface = () => {
@@ -200,6 +203,9 @@ const ChatInterface = () => {
   const [showProfile, setShowProfile] = useState(false); // State for Profile visibility
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [userId, setUserId] = useState(null);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -223,20 +229,107 @@ const ChatInterface = () => {
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-        if (user) {
-            setUserId(user.uid);
-        } else {
-            setUserId(null);
-        }
+      if (user) {
+        setUserId(user.uid);
+        const db = getDatabase();
+        const sessionListRef = ref(db, `users/${user.uid}/sessions`);
+        get(sessionListRef)
+          .then((snapshot) => {
+            let activeSessionId = null;
+            if (snapshot.exists()) {
+              const sessions = snapshot.val();
+              activeSessionId = Object.keys(sessions).find(id => sessions[id].logoutTime === "");
+            }
+  
+            if (activeSessionId) {
+              sendInitialMessage(activeSessionId);
+            } else {
+              // No active session found, create a new one
+              const newSessionRef = push(ref(db, `users/${user.uid}/sessions`), {
+                startTime: Date.now(),
+                logoutTime: "",
+              });
+              const newSessionId = newSessionRef.key;
+              if (newSessionId) {
+                setCurrentSessionId(newSessionId); // Update local state with the new session ID
+                sendInitialMessage(newSessionId);
+              } else {
+                console.error("Error creating new session.");
+                // Optionally, display an error to the user
+              }
+            }
+          })
+          .catch((error) => {
+            console.error("Error finding or creating active session:", error);
+            // Optionally, display an error to the user
+          });
+      } else {
+        setUserId(null);
+        setMessages([]);
+      }
     });
-
+  
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
+    const fetchDailyMessages = async () => {
+      if (!userId) return;
+
+      const db = getDatabase();
+      const sessionListRef = ref(db, `users/${userId}/sessions`);
+
+      try {
+        const snapshot = await get(sessionListRef);
+        if (snapshot.exists()) {
+          const sessions = snapshot.val();
+          const activeSessionId = Object.keys(sessions).find(id => sessions[id].logoutTime === "");
+
+          if (activeSessionId) {
+            setCurrentSessionId(activeSessionId);
+
+            const messagesRef = ref(db, `users/<span class="math-inline">\{userId\}/sessions/</span>{activeSessionId}/messages`);
+
+            // Get the start and end of the current day in milliseconds (using local time)
+            const now = new Date();
+            const startOfDay = new Date(now);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(now);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            const q = query(
+              messagesRef,
+              orderByChild('timestamp'),
+              startAt(startOfDay.getTime()),
+              endAt(endOfDay.getTime())
+            );
+
+            const msgSnapshot = await get(q);
+            if (msgSnapshot.exists()) {
+              const msgs = Object.values(msgSnapshot.val());
+              const sortedMessages = msgs.sort((a, b) => a.timestamp - b.timestamp);
+              setMessages(sortedMessages);
+            } else {
+              setMessages([]); // No messages for today
+            }
+
+            // REMOVE THIS LINE:
+            // sendInitialMessage(activeSessionId);
+
+          } else {
+            console.log("No active session found.");
+            setMessages([]);
+            // Optionally, trigger a new session creation here if needed
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching daily messages from Firebase:", error);
+        setErrorMessage("Failed to load messages.");
+      }
+    };
+
     if (userId) {
-      // Send an initial message to the AI when the user logs in
-      sendInitialMessage();
+      fetchDailyMessages();
     }
   }, [userId]);
 
@@ -254,7 +347,55 @@ const ChatInterface = () => {
     }, 1000);
   };
 
-  const sendInitialMessage = async () => {
+  const handleDownloadChat = async () => {
+    if (!userId || !currentSessionId) {
+      console.error("User ID or Session ID not available.");
+      return;
+    }
+  
+    try {
+      const response = await fetch('http://127.0.0.1:5000/download_chat', { // Ensure this matches your app.py route
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: userId,
+          sessionId: currentSessionId,
+          messages: messages,
+        }),
+      });
+  
+      if (response.ok) {
+        if (response.headers.get('Content-Disposition')) {
+          console.log("PDF download initiated by the backend.");
+        } else {
+          console.error("Backend did not set Content-Disposition header.");
+          // Optionally show an error message
+        }
+      } else {
+        console.error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json();
+        console.error("Backend error:", errorData);
+        // Optionally show an error message
+      }
+  
+    } catch (error) {
+      console.error("Network error:", error);
+      // Optionally show an error message
+    }
+  };
+
+  const saveMessageToFirebase = async (messageObj) => {
+    if (!userId || !currentSessionId) return;
+  
+    const db = getDatabase();
+    const sessionRef = ref(db, `users/${userId}/sessions/${currentSessionId}/messages`);
+    await push(sessionRef, messageObj);
+  };
+  
+
+  const sendInitialMessage = async (activeSessionId) => {
     try {
       const response = await fetch('http://127.0.0.1:5000/docai', {
         method: 'POST',
@@ -263,56 +404,60 @@ const ChatInterface = () => {
         },
         body: JSON.stringify({ input: "Introduce yourself in a warm and welcoming way.", user_id: userId }),
       });
-
+  
       if (response.ok) {
         const data = await response.json();
         const aiResponse = data.generated_code;
-        const dummyPercentage1 = Math.floor(Math.random() * 101); // Random 0-100
-        setMessages((prev) => [...prev, { text: aiResponse, isUser: false, percentage1: dummyPercentage1}]);
+        const dummyPercentage1 = Math.floor(Math.random() * 101);
+        const newMsg = { text: aiResponse, isUser: false, percentage1: dummyPercentage1, timestamp: Date.now() };
+        setMessages((prev) => [...prev, newMsg]);
+        await saveMessageToFirebase(newMsg);
       } else {
         console.error('Error:', response.status);
       }
     } catch (error) {
       console.error('Network error:', error);
+      setErrorMessage("Failed to connect to AI.");
     }
   };
-
+  
   const handleSendMessage = async () => {
     if (inputValue.trim()) {
-        const userMessage = inputValue; // Store the input value
-        setInputValue('');
-        setMessages((prev) => [...prev, { text: inputValue, isUser: true }]);
-
-        if (userId) { // Check if user is logged in
-            try {
-                const response = await fetch('http://127.0.0.1:5000/docai', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ input: inputValue, user_id: userId }), // Use Firebase UID
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    const aiResponse = data.generated_code;
-                    setMessages((prev) => [...prev, { text: aiResponse, isUser: false }]);
-                } else {
-                    console.error('Error:', response.status);
-                }
-            } catch (error) {
-                console.error('Network error:', error);
-            }
-        } else {
-            console.log("User not logged in.");
-            // Optionally, display a message to the user that they need to log in.
+      const userMessage = inputValue;
+      setInputValue('');
+      const newUserMsg = { text: userMessage, isUser: true, timestamp: Date.now() }; // Ensure timestamp is here
+      setMessages((prev) => [...prev, newUserMsg]);
+      await saveMessageToFirebase(newUserMsg);
+  
+      if (userId) {
+        try {
+          const response = await fetch('http://127.0.0.1:5000/docai', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ input: userMessage, user_id: userId }),
+          });
+  
+          if (response.ok) {
+            const data = await response.json();
+            const aiResponse = data.generated_code;
+            const dummyPercentage = Math.floor(Math.random() * 101);
+            const botMsg = { text: aiResponse, isUser: false, percentage1: dummyPercentage, timestamp: Date.now() };
+            setMessages((prev) => [...prev, botMsg]);
+            await saveMessageToFirebase(botMsg);
+          } else {
+            console.error('Error:', response.status);
+          }
+        } catch (error) {
+          console.error('Network error:', error);
         }
-
-        setInputValue('');
+      } else {
+        console.log("User not logged in.");
+      }
     }
   };
-
-
+  
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -322,7 +467,9 @@ const ChatInterface = () => {
 
   const handleSuggestionClick = (suggestion) => {
     setInputValue(suggestion);
-    setMessages(prev => [...prev, { text: suggestion, isUser: true }]);
+    const newUserSuggestion = { text: suggestion, isUser: true, timestamp: Date.now() }; // Ensure timestamp is here
+    setMessages(prev => [...prev, newUserSuggestion]);
+    saveMessageToFirebase(newUserSuggestion);
     generateBotResponse(suggestion);
     setInputValue("");
   };
@@ -372,7 +519,7 @@ const ChatInterface = () => {
               <IconButton color="primary" sx={{ marginRight: "10px" }} aria-label="group">
                 <LuSettings size={24} />
               </IconButton>
-              <IconButton sx={{ color: "#91ff35" }} aria-label="download">
+              <IconButton sx={{ color: "#91ff35" }} aria-label="download" onClick={handleDownloadChat}>
                 <MdDownloading size={24} />
               </IconButton>
             </Box>
