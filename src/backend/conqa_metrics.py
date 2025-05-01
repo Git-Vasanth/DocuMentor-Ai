@@ -16,7 +16,7 @@ from langchain_core.documents import Document
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-openai_api_key = "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"
+openai_api_key = ""
 
 openai.api_key = openai_api_key
 
