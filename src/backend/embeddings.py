@@ -13,7 +13,7 @@ from langchain_openai import ChatOpenAI
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
-openai_api_key = "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"
+openai_api_key = ""
 
 if not openai_api_key:
     logging.error("OPENAI_API_KEY environment variable is missing!")
