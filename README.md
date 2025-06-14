@@ -70,6 +70,9 @@ Measurements are based on logs, and all values represent averages.
 *Note: With Proof of Video Samples available. Other metrics are yet to be used.*
 
 ---
+## Presentation
+
+You can view the full presentation here: [DocuMentor-AI Presentation (PDF)]([https://example.com/your-presentation.pdf](https://github.com/Git-Vasanth/DocuMentor-Ai/blob/master/Documentor%20-%20Ai%20-%20presentation.pdf))
 
 ## Business Impact
 
