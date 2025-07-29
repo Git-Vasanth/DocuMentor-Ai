@@ -28,26 +28,6 @@ DocuMentor-AI utilizes a robust RAG (Retrieval Augmented Generation) pipeline to
 
 ---
 
-## Technology Stack
-
-### Frontend
-
-- React
-- Material UI
-
-### Backend
-
-- Flask
-- Langchain
-- Python
-- Firebase
-- OpenAI
-- pdfplumber
-- docx
-- bs4
-
----
-
 ## Data Validation
 
 DocuMentor-AI employs rigorous data validation using:
@@ -57,19 +37,6 @@ DocuMentor-AI employs rigorous data validation using:
 
 ---
 
-## Benchmarks
-
-Measurements are based on logs, and all values represent averages.
-
-| Pages       | Response Time | Model Accuracy (Faithfulness) |
-|-------------|---------------|-------------------------------|
-| 501 - 1k    | ≤ 1 Min       | 70-73%                        |
-| 1k - 1.5k   | 2 - 3 Min     | AI: 9 Secs                   |
-| 2k+         | 10+ Min       | AI: 1.1 Secs                 |
-
-*Note: With Proof of Video Samples available. Other metrics are yet to be used.*
-
----
 ## Presentation
 
 You can view the full presentation here: [DocuMentor-AI Presentation (PDF)](https://github.com/Git-Vasanth/DocuMentor-Ai/blob/master/Documentor%20-%20Ai%20-%20presentation.pdf)
