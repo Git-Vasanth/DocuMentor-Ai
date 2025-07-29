@@ -94,3 +94,7 @@ The application of metrics such as Faithfulness, Context Precision, and Response
 - **Trust and Reliability:** Building user confidence in the information provided, as responses are validated against retrieved contexts.
 - **Continuous Improvement:** Providing quantifiable data to identify areas for refinement in the RAG pipeline, leading to ongoing enhancements in performance and accuracy.
 
+## Demo
+
+[Download the video](path/to/video.mp4)
+
